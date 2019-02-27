@@ -1,0 +1,1 @@
+Write a function group_files_by_checksum that takes one argument file_path_names, corresponding to a flat list of the absolute path and name of files, and that returns a list of groups of duplicate files.
