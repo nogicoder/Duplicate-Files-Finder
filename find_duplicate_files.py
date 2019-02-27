@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from os import walk
-from os.path import join, exists, isfile, islink, getsize
+from os.path import join, exists, isfile, islink, getsize, abspath
 from hashlib import md5
 from json import dumps
 
@@ -9,86 +9,74 @@ from json import dumps
 def get_argument():
     parser = ArgumentParser(prog="Duplicate Files Finder",
                             description="Finding Duplicates")
-    parser.add_argument('-p', '--path', type=str, required=True, 
+    parser.add_argument('-p', '--path', type=str, required=True,
                         metavar="path", dest="path")
     args = parser.parse_args()
     return args.path
 
 
-def scan_files(path, file_list=[]):
-    for root, dirs, files in walk(path):
-        for file in files:
-            file_path = join(root, file)
-            if file_path not in file_list:
-                file_list.append(file_path)
-        for dir in dirs:
-            dir_path = join(root, dir)
-            if not islink(dir_path):
-                file_list = scan_files(dir_path, file_list)
-    return file_list
+def scan_files(path):
+    files=[]
+    for root, _, file in walk(path):
+        for filename in file:
+            if not islink(filename):
+                files.append(abspath(join(root, filename)))
+    return files
 
 
 def group_files_by_size(file_path_names):
+    group_dict = {}
+    group_list = []
 
-    def get_size_list(file_path_names):
-        size_list = []
-        for file in file_path_names:
-            file_size = getsize(file)
-            if file_size and file_size not in size_list:
-                size_list.append(file_size)
-        return size_list
+    for file in file_path_names:
+        file_size = getsize(file)
+        if file_size == 0:
+            continue
+        elif file_size in group_dict:
+            group_dict[file_size].append(file)
+        else:
+            group_dict[file_size] = [file]
 
-    groups = []
-    size_list = get_size_list(file_path_names)
-
-    for size in size_list:
-        group = []
-        for file in file_path_names:
-            file_size = getsize(file)
-            if file_size == size:
-                group.append(file)
+    for group in group_dict.values():
+        # group_list.append(group) if len(group) > 1 else 0
         if len(group) > 1:
-            groups.append(group)
-            
-    return groups
+            group_list.append(group)
+
+    return group_list
+
+
+def get_file_checksum(file):
+    with open(file, 'rb') as data:
+        file_hash = md5(data.read()).hexdigest()
+    return file_hash
 
 
 def group_files_by_checksum(file_path_names):
+    group_dict = {}
+    group_list = []
 
-    def get_file_checksum(file_path_names):
-        hash_list = []
-        for file in file_path_names:
-            with open(file) as f:
-                file_hash = md5(f.read().encode()).hexdigest()
-                if file_hash not in hash_list:
-                    hash_list.append(file_hash)
-        return hash_list
+    for file in file_path_names:
+        file_hash = get_file_checksum(file)
+        if file_hash in group_dict:
+            group_dict[file_hash].append(file)
+        else:
+            group_dict[file_hash] = [file]
 
-    groups = []
-    hash_list = get_file_checksum(file_path_names)
-    
-    for hash in hash_list:
-        group = []
-        for file in file_path_names:
-            with open(file) as f:
-                file_hash = md5(f.read().encode()).hexdigest()
-                if file_hash == hash:
-                    group.append(file)
+    for group in group_dict.values():
         if len(group) > 1:
-            groups.append(group)
+            group_list.append(group)
 
-    return groups
-
+    return group_list
 
 def find_duplicate_files(file_path_names):
-    size_groups = group_files_by_size(file_path_names)
     groups = []
+
+    size_groups = group_files_by_size(file_path_names)
     for group in size_groups:
         group = group_files_by_checksum(group)
-        if group:
-            groups += group
+        groups += group
 
-    return groups 
+    return groups
 
 
 def main():
@@ -97,8 +85,8 @@ def main():
         print("Invalid path")
         exit(1)
     else:
-        file_list = scan_files(path)
-        data = find_duplicate_files(file_list)
+        files = scan_files(path)
+        data = find_duplicate_files(files)
         print(dumps(data))
 
 
