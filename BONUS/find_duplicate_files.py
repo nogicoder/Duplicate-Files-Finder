@@ -109,74 +109,65 @@ def group_files_by_size(file_path_names):
     return size_list
 
 
-# ---------------------Convert Content to Checksum-----------------
-def get_file_checksum(file):
+# -----------------Check files using byte-to-byte comparison---------------
+def file_comparison(file1, file2):
     """
-    Get the hash value from a file's content.
+    Return True if 2 files have same content, False if not and None if
+    no READ permission on both files.
 
-    @param file: A file's absolute path.
+    @param file1, file2: The path of the 2 files.
 
-    @return: The hash value of a file.
+    @return: A Boolean value or None if no permission.
     """
-    # Error handling if file has no permission to read.
-    if not access(file, R_OK):
-        return None
+    if access(file1, R_OK) and access(file2, R_OK):
+        data1 = open(file1, 'rb').read()
+        data2 = open(file2, 'rb').read()
+        return data1 == data2
     else:
-        with open(file, 'rb') as data:
-            file_hash = md5(data.read()).hexdigest()
-
-        return file_hash
+        return None
 
 
-# ---------------------Grouping Based on Checksum------------------
-def create_hash_dict(file_path_names):
+def create_diff_group(file1, file_path_names):
     """
-    Return a dictionary with key is the hash and value is the filepath with
-    that hash.
+    Return a list of duplicate files based on content of the files.
 
-    @param file_path_names: A list of files with absolute paths.
+    @param file1: The source file to be compared.
 
-    @return: A dictionary of hashes and filepaths.
+    @param file_path_names: The list that has files to be compared to
+    the source file.
+
+    @return: A list of duplicate files.
     """
-    hash_dict = {}
-    # Create a dict with key is the filehash and
-    # values are the filepath
-    for file in file_path_names:
-        file_hash = get_file_checksum(file)
-        # if the file_hash is not None
-        if file_hash:
-            if file_hash in hash_dict:
-                hash_dict[file_hash].append(file)
-            else:
-                hash_dict[file_hash] = [file]
+    group = [file1]
+    for file2 in file_path_names:
+        if file2 != file1 and file_comparison(file1, file2):
+            group.append(file2)
 
-    return hash_dict
+    return sorted(group)
 
 
-def group_files_by_checksum(file_path_names):
+def group_files_by_diff(file_path_names):
     """
-    Return a list of group of files with the same checksum.
+    Return a list of groups of duplicate files based on content of the files.
 
-    @param file_path_names: A list of files with absolute paths.
-    The list being passed in will be sorted by size beforehand for efficiency.
+    @param file_path_names: The list that has files to be compared.
 
-    @return: A list of groups of files.
+    @return: A list of groups of duplicate files.
     """
-    hash_list = []
-    hash_dict = create_hash_dict(file_path_names)
-    # Create a list of groups of files that have more
-    # than 2 items
-    for group in hash_dict.values():
-        if len(group) > 1:
-            hash_list.append(group)
+    diff_groups = []
+    # Get the list of files with same content
+    for file1 in file_path_names:
+        group = create_diff_group(file1, file_path_names)
+        if group not in diff_groups:
+            diff_groups.append(group)
 
-    return hash_list
+    return diff_groups
 
 
-# --------Find Duplicate Files Based on Size and Checksum----------
+# --------Find Duplicate Files Based on Size and Diff----------
 def find_duplicate_files(file_path_names):
     """
-    Return a list of groups of duplicates filtered by size and checksum.
+    Return a list of groups of duplicates filtered by size and diff.
 
     @param file_path_names: A list of files with absolute paths.
 
@@ -185,10 +176,10 @@ def find_duplicate_files(file_path_names):
     groups = []
     # Grouping files by size first
     size_list = group_files_by_size(file_path_names)
-    # Grouping each group by checksum
+    # Grouping each group by difference in content
     for group in size_list:
-        hash_list = group_files_by_checksum(group)
-        groups += hash_list
+        diff_groups = group_files_by_diff(group)
+        groups += diff_groups
 
     return groups
 
